@@ -1,0 +1,10 @@
+require("./server-fixture");
+require("./http-utils.suite");
+require("./server-access.suite");
+require("./server-bootstrap.suite");
+require("./server-location.suite");
+require("./server-reports.suite");
+require("./server-claims.suite");
+require("./server-staff.suite");
+require("./server-admin.suite");
+require("./server-registration.suite");

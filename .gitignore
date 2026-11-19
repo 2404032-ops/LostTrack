@@ -1,0 +1,7 @@
+backend/storage/db.json
+backend/storage/*.tmp
+backend/storage/uploads/
+.env
+.env.*
+!.env.example
+node_modules/

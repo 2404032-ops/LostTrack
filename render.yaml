@@ -1,0 +1,37 @@
+services:
+  - type: web
+    name: losttrack
+    runtime: node
+    plan: free
+    region: singapore
+    buildCommand: npm ci
+    startCommand: npm start
+    healthCheckPath: /api/health
+    autoDeploy: true
+    envVars:
+      - key: NODE_VERSION
+        value: 24.22.1
+      - key: HOST
+        value: 0.0.0.0
+      - key: LOSTTRACK_REQUIRE_CLOUD_STORAGE
+        value: "true"
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: SUPABASE_STORAGE_BUCKET
+        value: losttrack-uploads
+      - key: BREVO_API_KEY
+        sync: false
+      - key: BREVO_SENDER_EMAIL
+        sync: false
+      - key: BREVO_SENDER_NAME
+        value: LostTrack
+      - key: LOSTTRACK_REPORT_RETENTION_DAYS
+        value: "30"
+      - key: LOSTTRACK_INITIAL_ADMIN_NAME
+        value: Main Admin
+      - key: LOSTTRACK_INITIAL_ADMIN_EMAIL
+        sync: false
+      - key: LOSTTRACK_INITIAL_ADMIN_PASSWORD
+        sync: false

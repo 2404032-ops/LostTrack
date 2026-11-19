@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="losttrack-retention-days" content="30">
+  <title>LostTrack | Campus Helpdesk</title>
+  <link rel="icon" type="image/png" href="/assets/images/logo-mark.png">
+  <link rel="stylesheet" href="/assets/css/styles.css">
+  <link rel="stylesheet" href="/assets/vendor/leaflet/leaflet.css">
+</head>
+<body>
+  <header id="site-header" class="topbar">
+    <div class="topbar-inner">
+      <a class="brand" href="#" data-page="home">
+        <span class="brand-mark" aria-hidden="true"></span>
+        <span class="brand-copy" translate="no"><span class="brand-word">Lost<em>Track</em></span><small>UFTB Smart Campus</small></span>
+      </a>
+      <nav id="nav" class="nav mode-switch">
+        <a href="#home" data-page="home" id="mode-portal" class="mode-btn"><span id="mode-portal-label">Student Portal</span></a>
+        <div class="admin-nav-group hidden" aria-label="Admin tools">
+          <a href="#dashboard" data-page="dashboard" id="mode-admin" class="mode-btn"><span id="mode-admin-label">Admin Dashboard</span> <span id="badge-pending-claims" class="hidden">0</span></a>
+          <a href="#reports" data-page="reports" id="admin-nav-reports" class="mode-btn admin-nav-link">All reports</a>
+          <a href="#admin-report-review" data-page="dashboard" data-admin-anchor="admin-report-review" data-admin-filter="claims" id="admin-nav-claims" class="mode-btn admin-nav-link">Claims</a>
+          <a href="#admin-approvals" data-page="dashboard" data-admin-anchor="admin-approvals" id="admin-nav-accounts" class="mode-btn admin-nav-link">Accounts</a>
+          <a href="#admin-tasks" data-page="dashboard" data-admin-anchor="admin-tasks" id="admin-nav-tasks" class="mode-btn admin-nav-link">Tasks</a>
+          <a href="#new" data-page="new" id="admin-nav-new" class="mode-btn admin-nav-link">New report</a>
+        </div>
+      </nav>
+      <div class="top-tools">
+        <a class="btn ghost alert-link" href="#notifications" data-page="notifications">Alerts <span id="alert-count" class="hidden">0</span></a>
+        <button id="language-toggle" class="btn ghost" type="button" aria-label="Change language">Bangla</button>
+        <button id="theme-toggle" class="btn ghost" type="button" aria-pressed="false">Dark</button>
+        <button id="retry-sync" class="btn ghost hidden" type="button">Retry connection</button>
+        <div class="user-chip">
+          <div>
+            <strong id="current-user-name">Campus user</strong>
+            <small id="current-user-email">@uftb.ac.bd</small>
+            <small id="current-user-role">Student</small>
+          </div>
+          <span id="current-user-initials">LT</span>
+        </div>
+        <button id="logout" class="btn ghost logout">Log out</button>
+      </div>
+    </div>
+  </header>
+
+  <main id="app"></main>
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+  <footer>
+    <p><span translate="no">LostTrack · UFTB Smart Campus · Team SANDHAN</span></p>
+  </footer>
+  <script src="/assets/js/language.js"></script>
+  <script src="/assets/vendor/leaflet/leaflet.js"></script>
+  <script src="/assets/js/app.js"></script>
+</body>
+</html>

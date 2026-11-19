@@ -1,0 +1,18 @@
+{
+  "name": "losttrack",
+  "version": "1.0.0",
+  "private": true,
+  "description": "LostTrack campus lost-and-found and issue management prototype",
+  "engines": {
+    "node": ">=20 <27"
+  },
+  "scripts": {
+    "start": "node backend/src/server.js",
+    "check": "node --check backend/src/server.js && node --check backend/src/routes.js && node --check backend/src/config.js && node --check backend/src/bangladesh-boundary.js && node --check backend/src/database.js && node --check backend/src/http-utils.js && node --check backend/src/auth.js && node --check backend/src/location-search.js && node --check backend/src/report-matching.js && node --check backend/src/report-state.js && node --check frontend/assets/js/app.js && node --check frontend/assets/js/language.js && node --check backend/test/server.test.js && node --check backend/test/http-utils.suite.js && node --check backend/test/server-fixture.js && node --check backend/test/server-access.suite.js && node --check backend/test/server-bootstrap.suite.js && node --check backend/test/server-location.suite.js && node --check backend/test/server-reports.suite.js && node --check backend/test/server-claims.suite.js && node --check backend/test/server-staff.suite.js && node --check backend/test/server-admin.suite.js && node --check backend/test/server-registration.suite.js",
+    "test": "node --test backend/test/server.test.js"
+  },
+  "dependencies": {
+    "leaflet": "^1.9.4",
+    "nodemailer": "^10.3.1"
+  }
+}
