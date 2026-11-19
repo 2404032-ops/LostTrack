@@ -198,3 +198,17 @@ test("Supabase state and private uploads persist across app restarts", async () 
     fs.rmSync(cloudDirectory, { recursive: true, force: true });
   }
 });
+
+test("the snapshot replacement RPC uses explicit predicates for table clears", () => {
+  const migration = fs.readFileSync(
+    path.join(root, "backend", "migrations", "002-normalized-relational-schema.sql"),
+    "utf8"
+  );
+  const functionDefinition = migration.match(
+    /create or replace function public\.replace_losttrack_state[\s\S]*?\$function\$;/i
+  );
+  assert.ok(functionDefinition);
+  const deletes = [...functionDefinition[0].matchAll(/\bdelete\s+from\s+public\.\w+\s+([^;]+);/gi)];
+  assert.equal(deletes.length, 10);
+  for (const [, predicate] of deletes) assert.match(predicate, /^where\b/i);
+});

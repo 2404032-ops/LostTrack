@@ -293,16 +293,17 @@ begin
     raise exception 'LostTrack state must be a JSON object';
   end if;
 
-  delete from public.notifications;
-  delete from public.report_history;
-  delete from public.report_votes;
-  delete from public.report_photos;
-  delete from public.private_clues;
-  delete from public.claims;
-  delete from public.maintenance_tasks;
-  delete from public.reports;
-  delete from public.password_resets;
-  delete from public.accounts;
+  -- The snapshot replacement intentionally clears each table; explicit predicates satisfy safe-update enforcement.
+  delete from public.notifications where id is not null;
+  delete from public.report_history where report_id is not null;
+  delete from public.report_votes where report_id is not null;
+  delete from public.report_photos where report_id is not null;
+  delete from public.private_clues where id is not null;
+  delete from public.claims where id is not null;
+  delete from public.maintenance_tasks where id is not null;
+  delete from public.reports where id is not null;
+  delete from public.password_resets where token_hash is not null;
+  delete from public.accounts where id is not null;
 
   insert into public.campuses (id, name)
   select distinct campus_id, campus_id
