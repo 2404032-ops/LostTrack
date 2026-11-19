@@ -26,7 +26,6 @@ function account(id, name, email, role, ageDays = 10) {
   const salt = crypto.randomBytes(16).toString("hex");
   return {
     id, name, email, role, requestedRole: role, status: "active",
-    emailVerified: true,
     passwordHash: `${salt}:${crypto.scryptSync(password, salt, 64).toString("hex")}`,
     createdAt: new Date(Date.now() - ageDays * day).toISOString()
   };

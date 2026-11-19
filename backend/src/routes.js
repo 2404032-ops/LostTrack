@@ -7,10 +7,8 @@ const { send, readRequestBody, imageType } = require("./http-utils");
 const { publicDb, mergeState } = require("./report-state");
 const auth = require("./auth");
 const {
-  sessions, emailReady, authenticatedUser, rateLimited, loginUser, registerUser,
-  createEmailVerification, sendEmailVerification, verifyEmail, createPasswordReset,
-  sendPasswordResetEmail, deletePasswordReset, resetPassword,
-  hasVerifiedUniversityEmail, hasUnverifiedContribution
+  sessions, passwordResetEmailReady, authenticatedUser, rateLimited, loginUser, registerUser,
+  createPasswordReset, sendPasswordResetEmail, deletePasswordReset, resetPassword
 } = auth;
 const { historyEntry, addNotification, trustLevel } = require("./report-matching");
 const { searchBangladeshLocations } = require("./location-search");
@@ -57,7 +55,7 @@ module.exports = function handleRequest(req, res) {
     });
     return;
   }
-  if (["/api/login", "/api/register", "/api/forgot-password", "/api/reset-password", "/api/send-verification-email", "/api/verify-email"].includes(url.pathname) && req.method === "POST") {
+  if (["/api/login", "/api/register", "/api/forgot-password", "/api/reset-password"].includes(url.pathname) && req.method === "POST") {
     if (rateLimited(req)) return send(res, 429, { ok: false, error: "Too many attempts. Try again later." });
     readRequestBody(req, 20_000, async raw => {
       let body;
@@ -73,44 +71,13 @@ module.exports = function handleRequest(req, res) {
         if (url.pathname === "/api/register") {
           const result = await registerUser(body.name || "", body.email || "", body.password || "", body.role || "user", body.privacyConsent === true);
           if (result && result !== "pending") return send(res, 400, { ok: false, error: result });
-          const account = readDb().accounts.find(item => item.email === String(body.email).toLowerCase());
-          const verification = account && emailReady ? await createEmailVerification(account.email) : null;
-          if (verification && emailReady) {
-            try {
-              await sendEmailVerification(verification.email, verification.token);
-            } catch (error) {
-              console.error("Email verification delivery failed:", error.message);
-              return send(res, 503, { ok: false, error: "Account created, but the verification email could not be sent. Sign in and use Resend verification email." });
-            }
-          }
           const message = result === "pending"
-            ? "Staff account request submitted. Verify your university email; an administrator must also approve your account."
-            : emailReady
-              ? "Student account created. Check your university inbox to verify your email."
-              : "Student account created. Email verification is unavailable until email delivery is configured; reports, upvotes and claims require a verified email.";
+            ? "Staff account request submitted. An administrator must approve your account."
+            : "Student account created. You can now sign in.";
           return send(res, 201, { ok: true, pending: result === "pending", message });
         }
-        if (url.pathname === "/api/send-verification-email") {
-          const user = authenticatedUser(req);
-          if (!user || !emailReady) return send(res, emailReady ? 401 : 503, { ok: false, error: emailReady ? "Sign in to verify your email." : "Email verification is not configured. Contact the administrator." });
-          const verification = await createEmailVerification(user.email);
-          if (verification) {
-            try {
-              await sendEmailVerification(verification.email, verification.token);
-            } catch (error) {
-              console.error("Email verification delivery failed:", error.message);
-              return send(res, 503, { ok: false, error: "The verification email could not be sent. Please try again later." });
-            }
-          }
-          return send(res, 200, { ok: true, message: "If your account needs verification, a link has been sent to its university email." });
-        }
-        if (url.pathname === "/api/verify-email") {
-          const email = await verifyEmail(body.token);
-          if (!email) return send(res, 400, { ok: false, error: "This verification link is invalid or expired. Sign in and request a new one." });
-          return send(res, 200, { ok: true, email, message: "University email verified. You can now submit reports, upvote issues and submit claims." });
-        }
         if (url.pathname === "/api/forgot-password") {
-          if (!emailReady) return send(res, 503, { ok: false, error: "Password-reset email is not configured. Contact the administrator." });
+          if (!passwordResetEmailReady) return send(res, 503, { ok: false, error: "Password-reset email is not configured. Contact the administrator." });
           const reset = await createPasswordReset(body.email || "");
           if (reset) {
             try {
@@ -158,8 +125,8 @@ module.exports = function handleRequest(req, res) {
   if (url.pathname === "/api/admin/accounts" && req.method === "GET") {
     const user = authenticatedUser(req);
     if (!user || user.role !== "admin") return send(res, 403, { ok: false, error: "Administrator access required." });
-    const accounts = readDb().accounts.map(({ id, name, email, role, requestedRole, status, emailVerified, createdAt, campusId }) => ({
-      id, name, email, role, requestedRole, status, emailVerified, createdAt, campusId
+    const accounts = readDb().accounts.map(({ id, name, email, role, requestedRole, status, createdAt, campusId }) => ({
+      id, name, email, role, requestedRole, status, createdAt, campusId
     }));
     return send(res, 200, { accounts });
   }
@@ -241,8 +208,6 @@ module.exports = function handleRequest(req, res) {
       if (body.consent !== true) return send(res, 400, { ok: false, error: "Consent is required before submitting a claim." });
       if (!detail || detail.length > 300) return send(res, 400, { ok: false, error: "Enter private ownership details (up to 300 characters)." });
       const db = readDb();
-      const account = db.accounts.find(item => item.id === user.id);
-      if (!account?.emailVerified) return send(res, 403, { ok: false, error: "Verify your university email before submitting a claim." });
       const report = db.reports.find(item => String(item.id) === String(body.reportId));
       if (!report || report.type !== "found" || report.status !== "Found") return send(res, 404, { ok: false, error: "This found item is no longer available for claims." });
       if (report.createdBy === user.id) return send(res, 403, { ok: false, error: "You cannot claim an item you reported." });
@@ -326,7 +291,6 @@ if (url.pathname === "/api/vote" && req.method === "POST") {
 const user = authenticatedUser(req);
 if (!user) return send(res, 401, { ok: false, error: "Authentication required." });
 if (!["user", "staff"].includes(user.role)) return send(res, 403, { ok: false, error: "Student or Staff access required to upvote." });
-if (!hasVerifiedUniversityEmail(readDb(), user)) return send(res, 403, { ok: false, error: "Verify your university email before upvoting." });
 readJson(req, res, 10_000, async body => {
   const db = readDb();
   const report = db.reports.find(item => String(item.id) === String(body.reportId));
@@ -348,9 +312,6 @@ readJson(req, res, 2_000_000, async incoming => {
 const user = authenticatedUser(req);
 if (!user) return send(res, 401, { ok: false, error: "Authentication required." });
 const current = readDb();
-if (!hasVerifiedUniversityEmail(current, user) && hasUnverifiedContribution(current, incoming, user)) {
-  return send(res, 403, { ok: false, error: "Verify your university email before submitting reports, editing reports, upvoting or updating staff tasks." });
-}
 const updated = mergeState(current, incoming, user);
 await writeDb(updated);
 send(res, 200, { ok: true, state: publicDb(updated, user) });
@@ -360,7 +321,6 @@ send(res, 200, { ok: true, state: publicDb(updated, user) });
   if (url.pathname === "/api/uploads" && req.method === "POST") {
     const user = authenticatedUser(req);
     if (!user || !["user", "staff", "admin"].includes(user.role)) return send(res, 403, { ok: false, error: "Report upload access required." });
-    if (!hasVerifiedUniversityEmail(readDb(), user)) return send(res, 403, { ok: false, error: "Verify your university email before uploading report images." });
     readRequestBody(req, 9_000_000, async raw => {
       let body;
       try {

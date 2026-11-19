@@ -10,7 +10,7 @@ const smtpReady = Boolean(process.env.SMTP_HOST && process.env.SMTP_USER && proc
 const brevoApiKey = process.env.BREVO_API_KEY?.trim();
 const brevoSenderEmail = process.env.BREVO_SENDER_EMAIL?.trim();
 const brevoReady = Boolean(brevoApiKey && brevoSenderEmail);
-const emailReady = smtpReady || brevoReady;
+const passwordResetEmailReady = smtpReady || brevoReady;
 const mailer = smtpReady ? nodemailer.createTransport({
   host: process.env.SMTP_HOST,
   port: Number(process.env.SMTP_PORT) || 587,
@@ -36,33 +36,6 @@ function passwordMatches(password, stored) {
   return expected.length === actual.length && crypto.timingSafeEqual(Buffer.from(actual), Buffer.from(expected));
 }
 
-function hasVerifiedUniversityEmail(db, user) {
-  return db.accounts.some(account => account.id === user.id && account.emailVerified === true);
-}
-
-function hasUnverifiedContribution(db, incoming, user) {
-  if (user.role === "admin") return false;
-  const existingReports = new Map(db.reports.map(report => [String(report.id), report]));
-  const editableFields = ["title", "category", "place", "date", "color", "text", "photos", "latitude", "longitude"];
-  for (const update of incoming.reports) {
-    const report = existingReports.get(String(update.id));
-    if (!report) return true;
-    if (report.createdBy === user.id && ["Open", "Found"].includes(report.status) &&
-      editableFields.some(key => update[key] !== undefined && JSON.stringify(update[key]) !== JSON.stringify(report[key]))) return true;
-    if (report.type === "issue" && report.status === "Open" && update.voted &&
-      !(report.votedBy || []).includes(user.id)) return true;
-  }
-  if (user.role === "staff") {
-    return incoming.tasks.some(update => db.tasks.some(task =>
-      task.id === update.id && task.assigneeEmail === user.email && task.status !== update.status));
-  }
-  return false;
-}
-
-function emailTokenHash(token) {
-  return crypto.createHash("sha256").update(token).digest("hex");
-}
-
 function loginUser(email, password) {
   const db = readDb();
   const account = db.accounts.find(item => item.email === email.toLowerCase());
@@ -70,7 +43,7 @@ function loginUser(email, password) {
   if (!isStrongPassword(password) || !account || !passwordMatches(password, account.passwordHash)) return null;
   const token = crypto.randomUUID();
   sessions.set(token, { id: account.id, email: email.toLowerCase(), role: account.role, name: account.name, expiresAt: Date.now() + sessionLifetime });
-  return { token, id: account.id, email: email.toLowerCase(), role: account.role, name: account.name, emailVerified: Boolean(account.emailVerified) };
+  return { token, id: account.id, email: email.toLowerCase(), role: account.role, name: account.name };
 }
 
 async function registerUser(name, email, password, requestedRole = "user", privacyConsent = false) {
@@ -85,7 +58,7 @@ async function registerUser(name, email, password, requestedRole = "user", priva
   db.accounts.push({
     id: crypto.randomUUID(), name: name.trim(), email: normalizedEmail,
     role: "user", requestedRole, status: requestedRole === "user" ? "active" : "pending",
-    passwordHash: hashPassword(password), emailVerified: false, privacyConsentAt: new Date().toISOString(),
+    passwordHash: hashPassword(password), privacyConsentAt: new Date().toISOString(),
     privacyConsentVersion: privacyNoticeVersion, campusId: "uftb-main", createdAt: new Date().toISOString()
   });
   await writeDb(db);
@@ -114,7 +87,7 @@ async function provisionInitialAdmin() {
   const now = new Date().toISOString();
   db.accounts.push({
     id: crypto.randomUUID(), name, email, role: "admin", requestedRole: "admin", status: "active",
-    emailVerified: true, passwordHash: hashPassword(password), campusId: "uftb-main", createdAt: now
+    passwordHash: hashPassword(password), campusId: "uftb-main", createdAt: now
   });
   await writeDb(db);
   console.log(`Initial administrator provisioned for ${email}. Remove the bootstrap credentials from the environment.`);
@@ -142,17 +115,6 @@ async function deletePasswordReset(tokenHash) {
   const db = readDb();
   db.passwordResets = activePasswordResets(db).filter(item => item.tokenHash !== tokenHash);
   await writeDb(db);
-}
-
-async function createEmailVerification(email) {
-  const db = readDb();
-  const account = db.accounts.find(item => item.email === email.toLowerCase());
-  if (!account || account.emailVerified) return null;
-  const token = crypto.randomBytes(32).toString("hex");
-  account.emailVerificationTokenHash = emailTokenHash(token);
-  account.emailVerificationExpiresAt = Date.now() + 24 * 60 * 60 * 1000;
-  await writeDb(db);
-  return { token, accountId: account.id, email: account.email };
 }
 
 async function sendOneTimeEmail(email, token, queryKey, subject, instruction, linkText, warning) {
@@ -205,28 +167,6 @@ function emailBaseUrl(environment = process.env, serverPort = port) {
   return baseUrl;
 }
 
-function sendEmailVerification(email, token) {
-  return sendOneTimeEmail(email, token, "verify-token", "Verify your LostTrack university email",
-    "Use this one-time link within 24 hours to verify your LostTrack account:", "Verify email",
-    "If you did not create this account, ignore this email.");
-}
-
-async function verifyEmail(token) {
-  if (typeof token !== "string" || !/^[a-f0-9]{64}$/i.test(token)) return null;
-  const db = readDb();
-  const tokenHash = emailTokenHash(token);
-  const account = db.accounts.find(item => item.emailVerificationTokenHash === tokenHash &&
-    Number(item.emailVerificationExpiresAt) > Date.now());
-  if (!account) return null;
-  account.emailVerified = true;
-  account.emailVerifiedAt = new Date().toISOString();
-  delete account.emailVerificationTokenHash;
-  delete account.emailVerificationExpiresAt;
-  await writeDb(db);
-  for (const session of sessions.values()) if (session.id === account.id) session.emailVerified = true;
-  return account.email;
-}
-
 function sendPasswordResetEmail(email, token) {
   return sendOneTimeEmail(email, token, "reset-token", "Reset your LostTrack password",
     "Use this one-time link within 15 minutes to reset your LostTrack password:", "Reset password",
@@ -273,4 +213,4 @@ function rateLimited(req) {
   return attempts.length > 10;
 }
 
-module.exports = {isStrongPassword, hashPassword, passwordMatches, hasVerifiedUniversityEmail, hasUnverifiedContribution, emailTokenHash, loginUser, registerUser, provisionInitialAdmin, activePasswordResets, createPasswordReset, deletePasswordReset, createEmailVerification, emailBaseUrl, sendEmailVerification, verifyEmail, sendPasswordResetEmail, resetPassword, authenticatedUser, requestKey, rateLimited, sessions, emailReady};
+module.exports = {isStrongPassword, hashPassword, passwordMatches, loginUser, registerUser, provisionInitialAdmin, activePasswordResets, createPasswordReset, deletePasswordReset, emailBaseUrl, sendPasswordResetEmail, resetPassword, authenticatedUser, requestKey, rateLimited, sessions, passwordResetEmailReady};

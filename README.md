@@ -28,7 +28,7 @@ npm start
 
 Then open **http://localhost:3001**. The server listens only on `127.0.0.1` by default; set `HOST` explicitly only when you intend to expose it on a trusted network.
 
-Local email verification and password-reset links point to `http://localhost:<PORT>` and work only while the local server is running on the same computer. `localhost` will not work from a phone or another computer. After deployment, Render uses its public service URL automatically; if you use a custom domain, set `APP_BASE_URL` to that HTTPS URL. Do not set `APP_BASE_URL` to localhost in Render.
+Local password-reset links point to `http://localhost:<PORT>` and work only while the local server is running on the same computer. `localhost` will not work from a phone or another computer. After deployment, Render uses its public service URL automatically; if you use a custom domain, set `APP_BASE_URL` to that HTTPS URL. Do not set `APP_BASE_URL` to localhost in Render.
 
 To check the code or run the automated tests, open another PowerShell window in the project folder and run:
 
@@ -41,22 +41,22 @@ npm test
 
 ## Deploy a free live demo with GitHub and Render
 
-GitHub stores the source code; it does not run this Node.js API. GitHub Pages alone cannot run LostTrack sign-in, reports, claims, uploads, or email verification. The included [`render.yaml`](./render.yaml) provisions a Render Free web service; Supabase stores normalized PostgreSQL records and private uploads, so Render's temporary filesystem is not used for user data.
+GitHub stores the source code; it does not run this Node.js API. GitHub Pages alone cannot run LostTrack sign-in, reports, claims, uploads, or password resets. The included [`render.yaml`](./render.yaml) provisions a Render Free web service; Supabase stores normalized PostgreSQL records and private uploads, so Render's temporary filesystem is not used for user data.
 
 This is a free-tier prototype, not a production service. Render Free services sleep after inactivity, Supabase Free projects may pause after a week without activity, and the free quotas/availability can change. Although the hosted data is normalized, the app still reads and writes a full relational snapshot and is intended for one app instance; Supabase Free has no automatic database backups. Do not use real identity documents or sensitive personal data.
 
 1. Create a free Supabase project. In its **SQL Editor**, run [`backend/migrations/002-normalized-relational-schema.sql`](./backend/migrations/002-normalized-relational-schema.sql). It creates the normalized schema and RPCs used by the app; if the earlier JSONB migration has data, this migration imports that state before removing the old table. Find the project URL and `service_role` key in the Supabase API settings. Keep the key secret; never paste it into chat or commit it. The app creates a private `losttrack-uploads` bucket on first startup.
-2. Create a Brevo account, verify a sender email in its sender settings, and create an API key. Brevo is accessed over HTTPS, which works on Render Free; email delivery still depends on the sender being verified and the provider account being approved.
+2. Optional: configure Brevo or Gmail SMTP if you want password-reset emails. Brevo is accessed over HTTPS; delivery depends on the sender being verified and the provider account being approved.
 3. Push the updated source to the existing public GitHub repository. Do not add `.env`, `backend/storage/db.json`, or uploaded photos; `.gitignore` excludes them. GitHub Actions runs syntax checks and the backend tests.
-4. In Render, choose **New → Blueprint**, connect GitHub, and select `iftiurhossen11/LostTrack`. Review the Blueprint: the web service plan should say **Free**, with no disk. Apply it and enter `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `BREVO_API_KEY`, `BREVO_SENDER_EMAIL`, `LOSTTRACK_INITIAL_ADMIN_EMAIL`, and a strong `LOSTTRACK_INITIAL_ADMIN_PASSWORD` directly in Render's secure environment form. Do not send these values to anyone.
-5. Wait for the service to become **Live**, open its `onrender.com` URL, and verify `/api/health`. Render supplies the public URL for verification and password-reset links. Test registration, email verification, report creation, image upload, and sign-in with the initial Main Admin account.
+4. In Render, choose **New → Blueprint**, connect GitHub, and select `iftiurhossen11/LostTrack`. Review the Blueprint: the web service plan should say **Free**, with no disk. Apply it and enter `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `LOSTTRACK_INITIAL_ADMIN_EMAIL`, and a strong `LOSTTRACK_INITIAL_ADMIN_PASSWORD` directly in Render's secure environment form. Add `BREVO_API_KEY` and `BREVO_SENDER_EMAIL` only if you want password-reset emails. Do not send these values to anyone.
+5. Wait for the service to become **Live**, open its `onrender.com` URL, and verify `/api/health`. Render supplies the public URL for password-reset links. Test registration, report creation, image upload, and sign-in with the initial Main Admin account.
 6. After confirming admin sign-in, remove `LOSTTRACK_INITIAL_ADMIN_EMAIL` and `LOSTTRACK_INITIAL_ADMIN_PASSWORD` from the Render environment and redeploy; the created account remains in Supabase. Future pushes to the linked branch can trigger deployment automatically.
 
 ## First administrator setup
 
 Public registration cannot create an administrator. To initialize a new, empty database, set `LOSTTRACK_INITIAL_ADMIN_EMAIL` to the administrator's `@uftb.ac.bd` address and `LOSTTRACK_INITIAL_ADMIN_PASSWORD` to a strong password in the local `.env` file before the first start. You can optionally change `LOSTTRACK_INITIAL_ADMIN_NAME`. The password must be at least 12 characters and include uppercase, lowercase, a number, and a symbol.
 
-On startup, LostTrack creates this verified Main Admin only if the database has no active administrator. The password is stored as a salted hash. After seeing the startup message that confirms provisioning, remove the bootstrap email and password from `.env`; later starts will not recreate or change the administrator. Keep `.env` private and backed up securely.
+On startup, LostTrack creates this Main Admin only if the database has no active administrator. The password is stored as a salted hash. After seeing the startup message that confirms provisioning, remove the bootstrap email and password from `.env`; later starts will not recreate or change the administrator. Keep `.env` private and backed up securely.
 
 ## Project layout
 
@@ -90,9 +90,9 @@ backend/storage/uploads/
 - 14-day duplicate detection shows matching open issues with an "Upvote this instead" action, flags reports submitted anyway, and supports administrator merge.
 - Priority score based on severity, unique votes, safety risk, and age; high-severity safety risks have the proposal's High-priority floor. Overrides require a reason and enter server-written history.
 - Overdue marking for unresolved High-priority issues older than seven days.
-- Private claim details are sent directly to the claim API and are not returned in Student/Staff state or saved in their browser cache. Claims require verified university email and separate consent; users get up to three attempts, with one more attempt available only after an administrator reopens the latest rejected claim. Claimants can provide additional details when an administrator requests them without using another attempt. Claimant trust level is advisory; feedback is generic; administrators record decisions and in-app notifications. Only one claimant can be approved per found item; once approved, the item accepts no further claims and cannot be approved again. Approval is blocked once the item is no longer available. Returning an item requires an approved claim and an administrator-confirmed in-person identity check; the check is recorded in report history without storing ID details.
-- Registration requires consent to the displayed privacy notice and sends a time-limited university-email verification link. Only server-verified `@uftb.ac.bd` accounts can contribute; the verification token is stored as a hash and can be resent by the signed-in user.
-- Verified Students and approved Staff can create and edit reports, upload images, upvote issues, and submit eligible ownership claims. Verified Staff can also advance only their own assigned maintenance tasks from Assigned to In progress to Completed. Administrators assign work to active Staff and verify/resolve reports.
+- Private claim details are sent directly to the claim API and are not returned in Student/Staff state or saved in their browser cache. Claims require a signed-in Student or Staff account and separate consent; users get up to three attempts, with one more attempt available only after an administrator reopens the latest rejected claim. Claimants can provide additional details when an administrator requests them without using another attempt. Claimant trust level is advisory; feedback is generic; administrators record decisions and in-app notifications. Only one claimant can be approved per found item; once approved, the item accepts no further claims and cannot be approved again. Approval is blocked once the item is no longer available. Returning an item requires an approved claim and an administrator-confirmed in-person identity check; the check is recorded in report history without storing ID details.
+- Registration requires consent to the displayed privacy notice and a valid `@uftb.ac.bd` address. Student accounts activate immediately; Staff accounts require administrator approval. LostTrack does not send or require email verification.
+- Students and approved Staff can create and edit reports, upload images, upvote issues, and submit eligible ownership claims. Staff can advance only their own assigned maintenance tasks from Assigned to In progress to Completed. Administrators assign work to active Staff and verify/resolve reports.
 - Server-generated status history, scoped notifications, campus IDs on new records, Bangla/English label toggle, offline report drafts, and automatic retry of queued reports when the connection returns. Queued reports are marked "Pending sync"; images cannot be uploaded offline and must be selected again if the form is reloaded. JSON export is also available.
 - Light and dark display modes are available from the language/theme controls on both sign-in and signed-in screens; the selected mode is saved on the current device.
 - Closed, returned, or merged reports and their uploaded images are removed after the configured `LOSTTRACK_REPORT_RETENTION_DAYS` period (30 days by default). Open reports remain until resolved.
@@ -101,7 +101,7 @@ backend/storage/uploads/
 
 - Public registration accepts only `@uftb.ac.bd` addresses; Student accounts activate immediately and Staff accounts require administrator approval. Public Main Admin registration is disabled.
 - Passwords use salted scrypt hashes. Session tokens expire after eight hours. Password reset invalidates existing sessions.
-- University email domain syntax is checked at registration, and mailbox ownership is verified through a 24-hour, one-time email link before a Student or Staff account can submit or edit reports, upload images, vote, update assigned tasks, or claim an item. Existing accounts must verify before contributing.
+- University email domain syntax is checked at registration. Email verification is not required for Students or approved Staff to use their role permissions.
 - Password-reset tokens are never returned by the API. Reset emails require SMTP or Brevo configuration. Without email delivery, the API returns a configuration error instead of exposing a reset token.
 - Local Gmail SMTP reads settings from `.env` (copy `.env.example` to `.env`) or from the process environment. Never commit `.env` or share its App Password:
 
@@ -110,8 +110,8 @@ Copy-Item .env.example .env
 ```
 
 - In Google Account settings, enable 2-Step Verification and generate an App Password. Put your Gmail address in `SMTP_USER` and `SMTP_FROM`, and the generated App Password in `SMTP_PASS`. Do not use your regular Google password. Restart the server after editing `.env`.
-- Gmail SMTP delivery and the email verification/reset flows require the account's App Password to be created by its owner.
-- Hosted email uses Brevo's HTTPS API. Configure `BREVO_API_KEY` and a sender email that is verified in Brevo; keep the API key only in the provider's environment settings. If Render logs show HTTP 401, replace the revoked or incorrect key in Render with a newly generated Brevo API key, then redeploy.
+- Gmail SMTP password-reset delivery requires the account's App Password to be created by its owner.
+- Optional hosted password-reset email uses Brevo's HTTPS API. Configure `BREVO_API_KEY` and a sender email that is verified in Brevo; keep the API key only in the provider's environment settings.
 
 - User-facing report data does not contain private clues or other claimants' details. Staff does not receive other users' claim details or maintenance tasks assigned to other staff. Report attachments can be viewed by anyone who knows an image URL; never upload faces, identity documents, receipts, or personal contact details.
 - Signing out clears this device's cached account data and saved report draft. If a report has not synced yet, the app asks before removing it. Saved drafts are associated with the signed-in account and are not restored for a different account.

@@ -29,17 +29,18 @@ test("role access and sensitive fields are enforced on the server", async () => 
   assert.equal(studentAccount.emailVerificationExpiresAt, undefined);
 });
 
-test("unverified campus accounts cannot create or change reports, vote, claim, or upload", async () => {
+test("email verification is not required for campus actions", async () => {
   const database = readDatabase();
   const student = database.accounts.find(item => item.id === fixture.users.student.id);
+  const studentEmailVerified = student.emailVerified;
   student.emailVerified = false;
   writeDatabase(database);
   try {
     const state = await request("/api/state", fixture.tokens.student);
-    assert.equal(state.emailVerified, false);
+    assert.equal(Object.hasOwn(state, "emailVerified"), false);
     state.reports.find(report => report.id === "issue-1").title = "Unverified report edit";
-    const editResponse = await request("/api/state", fixture.tokens.student, state, 403);
-    assert.match(editResponse.error, /Verify your university email/);
+    const editResponse = await request("/api/state", fixture.tokens.student, state);
+    assert.equal(editResponse.state.reports.find(report => report.id === "issue-1").title, "Unverified report edit");
     const freshState = await request("/api/state", fixture.tokens.student);
     freshState.reports.push({
       ...freshState.reports.find(report => report.id === "issue-1"),
@@ -47,33 +48,36 @@ test("unverified campus accounts cannot create or change reports, vote, claim, o
       createdBy: fixture.users.student.id,
       consent: true
     });
-    const reportResponse = await request("/api/state", fixture.tokens.student, freshState, 403);
-    assert.match(reportResponse.error, /Verify your university email/);
-    const voteResponse = await request("/api/vote", fixture.tokens.student, { reportId: "issue-1" }, 403);
-    assert.match(voteResponse.error, /Verify your university email/);
-    const claimResponse = await request("/api/claims", fixture.tokens.student, {
+    const reportResponse = await request("/api/state", fixture.tokens.student, freshState);
+    assert(reportResponse.state.reports.some(report => report.id === "unverified-report"));
+    await request("/api/vote", fixture.tokens.student, { reportId: "issue-1" });
+    await request("/api/claims", fixture.tokens.student, {
       reportId: "found-1",
       detail: "A private detail",
       consent: true
-    }, 403);
-    assert.match(claimResponse.error, /Verify your university email/);
-    const uploadResponse = await request("/api/uploads", fixture.tokens.student, { files: [] }, 403);
-    assert.match(uploadResponse.error, /Verify your university email/);
+    }, 201);
+    const invalidUpload = await request("/api/uploads", fixture.tokens.student, {
+      files: [{ data: Buffer.from("not an image").toString("base64") }]
+    }, 400);
+    assert.match(invalidUpload.error, /JPG, PNG, or WebP/i);
   } finally {
-    student.emailVerified = true;
+    if (studentEmailVerified === undefined) delete student.emailVerified;
+    else student.emailVerified = studentEmailVerified;
     writeDatabase(database);
   }
   const staffDatabase = readDatabase();
   const staff = staffDatabase.accounts.find(item => item.id === fixture.users.staff.id);
+  const staffEmailVerified = staff.emailVerified;
   staff.emailVerified = false;
   writeDatabase(staffDatabase);
   try {
     const staffState = await request("/api/state", fixture.tokens.staff);
     staffState.tasks.find(task => task.id === "task-staff").status = "In progress";
-    const taskResponse = await request("/api/state", fixture.tokens.staff, staffState, 403);
-    assert.match(taskResponse.error, /Verify your university email/);
+    const taskResponse = await request("/api/state", fixture.tokens.staff, staffState);
+    assert.equal(taskResponse.state.tasks.find(task => task.id === "task-staff").status, "In progress");
   } finally {
-    staff.emailVerified = true;
+    if (staffEmailVerified === undefined) delete staff.emailVerified;
+    else staff.emailVerified = staffEmailVerified;
     writeDatabase(staffDatabase);
   }
 });
@@ -126,9 +130,6 @@ test("privacy notices show the configured period in English and Bengali", () => 
   assert(notices[0].textContent.includes("বন্ধ রিপোর্ট ও ছবি"));
   assert.equal(placeholders[0].placeholder, "আপনার নাম");
   assert.equal(placeholders[1].placeholder, "শক্তিশালী পাসওয়ার্ড তৈরি করুন");
-  assert.equal(context.window.LostTrackI18n.text(
-    "LostTrack's server is unavailable. Open this link on the same computer while the local server is running, or use the deployed LostTrack URL."
-  ), "LostTrack সার্ভারে সংযোগ করা যাচ্ছে না। স্থানীয় সার্ভার চালু রেখে একই কম্পিউটারে লিংকটি খুলুন, অথবা চালু করা LostTrack সাইটের ঠিকানা ব্যবহার করুন।");
 });
 
 test("invalid report retention settings prevent server startup", () => {

@@ -73,7 +73,7 @@ test("Supabase state and private uploads persist across app restarts", async () 
   let state = {
     accounts: [{
       id: "cloud-student", name: "Cloud Student", email: "cloud-student@uftb.ac.bd",
-      role: "user", requestedRole: "user", status: "active", emailVerified: true,
+      role: "user", requestedRole: "user", status: "active",
       passwordHash: `${studentSalt}:${crypto.scryptSync(studentPassword, studentSalt, 64).toString("hex")}`
     }],
     reports: [], claims: [], privateClues: [], notifications: [], tasks: []

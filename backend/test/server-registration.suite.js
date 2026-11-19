@@ -1,9 +1,9 @@
 const fixture = require("./server-fixture");
-const { assert, crypto, fs, os, path, spawnSync, vm, password, root, request, login, readDatabase, writeDatabase, unusedPort } = fixture;
+const { assert, spawnSync, password, root, request, login, readDatabase, writeDatabase } = fixture;
 const { emailBaseUrl } = require("../src/auth");
 const { test } = require("node:test");
 
-test("email links prefer the live Render URL and use the active local port", () => {
+test("password-reset links prefer the live Render URL and use the active local port", () => {
   assert.equal(emailBaseUrl({
     APP_BASE_URL: "http://localhost:3000",
     RENDER_EXTERNAL_URL: "https://losttrack.onrender.com"
@@ -16,7 +16,7 @@ test("email links prefer the live Render URL and use the active local port", () 
   assert.equal(emailBaseUrl({ RENDER_EXTERNAL_URL: "https://losttrack.onrender.com" }, 3001), "https://losttrack.onrender.com");
 });
 
-test("Brevo sends verification links through its HTTPS API and reports provider errors", () => {
+test("Brevo sends password-reset links through its HTTPS API and reports provider errors", () => {
   const script = `
     const assert = require("node:assert/strict");
     let responseStatus = 201;
@@ -26,14 +26,14 @@ test("Brevo sends verification links through its HTTPS API and reports provider 
       const message = JSON.parse(options.body);
       assert.equal(message.sender.email, "sender@example.com");
       assert.equal(message.to[0].email, "student@uftb.ac.bd");
-      assert.match(message.textContent, /https:\\/\\/losttrack\\.example\\.com\\/\\?verify-token=abcdef123456/);
+      assert.match(message.textContent, /https:\\/\\/losttrack\\.example\\.com\\/\\?reset-token=abcdef123456/);
       return { ok: responseStatus < 300, status: responseStatus };
     };
     const auth = require("./backend/src/auth");
     (async () => {
-      await auth.sendEmailVerification("student@uftb.ac.bd", "abcdef123456");
+      await auth.sendPasswordResetEmail("student@uftb.ac.bd", "abcdef123456");
       responseStatus = 401;
-      await assert.rejects(auth.sendEmailVerification("student@uftb.ac.bd", "abcdef123456"), /HTTP 401/);
+      await assert.rejects(auth.sendPasswordResetEmail("student@uftb.ac.bd", "abcdef123456"), /HTTP 401/);
     })().catch(error => {
       console.error(error);
       process.exitCode = 1;
@@ -50,7 +50,7 @@ test("Brevo sends verification links through its HTTPS API and reports provider 
   assert.equal(result.status, 0, result.stderr);
 });
 
-test("registration validates university email at the API boundary", async () => {
+test("registration validates university email without requiring verification", async () => {
   const database = readDatabase();
   database.reports.push({
     id: "registration-found-item", type: "found", title: "Registration test item", category: "Notebook",
@@ -62,31 +62,23 @@ test("registration validates university email at the API boundary", async () => 
   const invalid = await request("/api/register", null, { name: "Outside User", email: "outside@example.com", password, role: "user" }, 400);
   assert.match(invalid.error, /@uftb\.ac\.bd/i);
   await request("/api/register", null, { name: "Unconsented User", email: "no-consent@uftb.ac.bd", password, role: "user" }, 400);
-  const registration = await request("/api/register", null, { name: "Unverified User", email: "unverified@uftb.ac.bd", password, role: "user", privacyConsent: true }, 201);
-  assert.match(registration.message, /verification/i);
-  const unverified = await login("unverified@uftb.ac.bd");
-  assert.equal(unverified.emailVerified, false);
-  const claim = await request("/api/claims", unverified.token, { reportId: "registration-found-item", detail: "Claim without verified email", consent: true }, 403);
-  assert.match(claim.error, /verify your university email/i);
-  const verificationToken = crypto.randomBytes(32).toString("hex");
-  const updatedDatabase = readDatabase();
-  const account = updatedDatabase.accounts.find(item => item.email === "unverified@uftb.ac.bd");
-  account.emailVerificationTokenHash = crypto.createHash("sha256").update(verificationToken).digest("hex");
-  account.emailVerificationExpiresAt = Date.now() + 60_000;
-  writeDatabase(updatedDatabase);
-  const verified = await request("/api/verify-email", null, { token: verificationToken });
-  assert.equal(verified.email, account.email);
-  const verifiedState = await request("/api/state", unverified.token);
-  assert.equal(verifiedState.reports.find(report => report.id === "registration-found-item").claimDetail, undefined);
-  const submittedClaim = await request("/api/claims", unverified.token, {
-    reportId: "registration-found-item", detail: "Verified claimant details", consent: true
+  const registration = await request("/api/register", null, { name: "New User", email: "new-user@uftb.ac.bd", password, role: "user", privacyConsent: true }, 201);
+  assert.match(registration.message, /sign in/i);
+  assert.doesNotMatch(registration.message, /verification/i);
+  const newUser = await login("new-user@uftb.ac.bd");
+  assert.equal(Object.hasOwn(newUser, "emailVerified"), false);
+  const newUserState = await request("/api/state", newUser.token);
+  assert.equal(Object.hasOwn(newUserState, "emailVerified"), false);
+  await request("/api/send-verification-email", newUser.token, {}, 404);
+  await request("/api/verify-email", null, { token: "unused" }, 404);
+  const submittedClaim = await request("/api/claims", newUser.token, {
+    reportId: "registration-found-item", detail: "New claimant details", consent: true
   }, 201);
   assert.equal(submittedClaim.state.claims[0].detail, undefined);
-  const verifiedAccount = readDatabase().accounts.find(item => item.email === account.email);
-  assert.equal(verifiedAccount.emailVerified, true);
-  assert.equal(verifiedAccount.privacyConsentVersion, "1.0");
-  assert(verifiedAccount.privacyConsentAt);
-  assert.equal(verifiedAccount.emailVerificationTokenHash, undefined);
+  const newAccount = readDatabase().accounts.find(item => item.email === "new-user@uftb.ac.bd");
+  assert.equal(Object.hasOwn(newAccount, "emailVerified"), false);
+  assert.equal(newAccount.privacyConsentVersion, "1.0");
+  assert(newAccount.privacyConsentAt);
 });
 
 test("returning a found item requires an approved claim and in-person identity check", async () => {

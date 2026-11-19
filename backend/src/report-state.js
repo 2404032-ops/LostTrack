@@ -6,7 +6,6 @@ function publicDb(db, user) {
   const { role } = user;
   const { accounts, privateClues, passwordResets, ...safeDb } = db;
   void passwordResets;
-  safeDb.emailVerified = Boolean(accounts.find(account => account.id === user.id)?.emailVerified);
   if (role === "admin") safeDb.privateClues = privateClues;
   safeDb.reports = safeDb.reports.map(report => report.type === "issue" ? { ...report, ...priorityScore(report) } : report);
   if (role === "admin") return safeDb;

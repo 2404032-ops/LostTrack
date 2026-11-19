@@ -3,10 +3,7 @@ if (resetTokenFromUrl) {
   localStorage.setItem("losttrack-reset-token", resetTokenFromUrl);
   localStorage.setItem("losttrack-auth-mode", "reset");
 }
-const verificationTokenFromUrl = new URLSearchParams(location.search).get("verify-token");
-const verificationServerUnavailable = "LostTrack's server is unavailable. Open this link on the same computer while the local server is running, or use the deployed LostTrack URL.";
-if (verificationTokenFromUrl) localStorage.setItem("losttrack-auth-mode", "login");
-if (resetTokenFromUrl || verificationTokenFromUrl) history.replaceState(null, "", location.pathname);
+if (resetTokenFromUrl) history.replaceState(null, "", location.pathname);
 const readLocal = (key, fallback = null) => {
   try { return JSON.parse(localStorage.getItem(key) || "null") || fallback; } catch { return fallback; }
 };
@@ -73,10 +70,6 @@ const save = () => {
     if (result?.state) {
       const cachedAccounts = state.accounts;
       state = normalizeState(result.state);
-      if (session && typeof state.emailVerified === "boolean") {
-        session.emailVerified = state.emailVerified;
-        localStorage.setItem("losttrack-session", JSON.stringify(session));
-      }
       if (role === "admin") state.accounts = cachedAccounts || [];
       localStorage.setItem("losttrack-data", JSON.stringify(state));
       render();
@@ -118,10 +111,6 @@ async function syncFromApi() {
       ...state.reports
     ];
     normalizeState(state);
-    if (session && typeof remote.emailVerified === "boolean") {
-      session.emailVerified = remote.emailVerified;
-      localStorage.setItem("losttrack-session", JSON.stringify(session));
-    }
     apiReady = true;
     localStorage.setItem("losttrack-data", JSON.stringify(state));
     if (role === "admin") {
@@ -799,9 +788,6 @@ function render() {
   }
   app.innerHTML = (pages[page] || pages.home)();
   if (page === "reports") initializeReportLocationSearch();
-  if (["user", "staff"].includes(role) && !session.emailVerified) {
-    app.insertAdjacentHTML("afterbegin", `<div class="notice email-verification-notice">Verify your university email to submit reports, upvote issues, claim items or update staff tasks. Check your inbox or <button class="btn ghost" id="resend-verification" type="button">Resend verification email</button></div>`);
-  }
   if (page === "new") {
     restoreDraft();
     if (pendingReportKind) {
@@ -1170,7 +1156,7 @@ function possibleMatches(report, limit = 3) {
     .slice(0, limit);
 }
 function portalClaimButton(report) {
-  if (report.type !== "found" || report.status !== "Found" || !session.emailVerified) return "";
+  if (report.type !== "found" || report.status !== "Found") return "";
   const myClaims = state.claims.filter(claim => claim.reportId === report.id && claim.claimantId === session.id);
   const latest = myClaims[myClaims.length - 1];
   const reopened = myClaims.some(claim => claim.reopened);
@@ -1203,7 +1189,7 @@ function portalIssueCard(report) {
   return `<article class="portal-issue">
     <div class="portal-issue-top"><div><span class="small">${esc(report.category)}</span><h3>${esc(report.title)}</h3><p>${esc(report.place)} · ${esc(report.date)}</p></div>${tag(`${report.priority} priority`, report.priority === "High" ? "red" : "amber")}</div>
     <div class="portal-score"><span>Suggested score</span><strong>${priority.score}/100 · ${esc(priority.suggested)}</strong><div class="portal-score-bar"><i style="width:${priority.score}%"></i></div>${report.possibleDuplicate ? `<p>Possible duplicate</p>` : ""}</div>
-    <div class="portal-actions">${session.emailVerified ? `<button class="btn amber vote" data-id="${esc(report.id)}" ${report.voted ? "disabled" : ""}>${report.voted ? "Upvoted" : "Me too / Upvote"} (${report.votes})</button>` : `<button class="btn amber" disabled>Verify email to upvote</button>`}<span class="small">Status: ${esc(report.status)}</span></div>
+    <div class="portal-actions"><button class="btn amber vote" data-id="${esc(report.id)}" ${report.voted ? "disabled" : ""}>${report.voted ? "Upvoted" : "Me too / Upvote"} (${report.votes})</button><span class="small">Status: ${esc(report.status)}</span></div>
   </article>`;
 }
 function bindPortalFilters() {
@@ -1301,7 +1287,7 @@ function reportCards(items, admin = false) {
       : `Make a claim (${claimAttempts + 1}/3)`;
     const privateClue = getPrivateClue(x.id);
     const actions = admin ? adminActions(x)
-      : `${session.emailVerified && x.createdBy === session.id && ["Open", "Found"].includes(x.status) ? `<button class="btn ghost edit-report" data-id="${reportId}">Edit report</button>` : ""}${session.emailVerified && x.type === "issue" && x.status !== "Resolved" && x.status !== "Merged" ? `<button class="btn secondary vote" data-id="${reportId}" ${x.voted ? "disabled" : ""}>${x.voted ? "Upvoted" : "Upvote"}</button>` : ""}${x.type === "found" && x.status === "Found" && session.emailVerified && canClaim ? `<button class="btn claim" data-id="${reportId}">${nextAttemptLabel}</button>` : ""}${x.type === "found" && x.status === "Found" && session.emailVerified && latestMyClaim?.status === "Needs more information" ? `<button class="btn secondary continue-claim" data-id="${reportId}" data-claim="${esc(latestMyClaim.id)}">Provide more information</button>` : ""}<button class="btn ghost history-btn" data-id="${reportId}">View history</button>`;
+      : `${x.createdBy === session.id && ["Open", "Found"].includes(x.status) ? `<button class="btn ghost edit-report" data-id="${reportId}">Edit report</button>` : ""}${x.type === "issue" && x.status !== "Resolved" && x.status !== "Merged" ? `<button class="btn secondary vote" data-id="${reportId}" ${x.voted ? "disabled" : ""}>${x.voted ? "Upvoted" : "Upvote"}</button>` : ""}${x.type === "found" && x.status === "Found" && canClaim ? `<button class="btn claim" data-id="${reportId}">${nextAttemptLabel}</button>` : ""}${x.type === "found" && x.status === "Found" && latestMyClaim?.status === "Needs more information" ? `<button class="btn secondary continue-claim" data-id="${reportId}" data-claim="${esc(latestMyClaim.id)}">Provide more information</button>` : ""}<button class="btn ghost history-btn" data-id="${reportId}">View history</button>`;
     const priority = x.type === "issue" ? priorityFor(x) : null;
     const photos = x.photos?.length ? `<div class="report-photos">${x.photos.map(photo => `<img src="${esc(photo)}" alt="Report attachment" loading="lazy">`).join("")}</div>` : "";
     const issueDetails = x.type === "issue"
@@ -1354,7 +1340,7 @@ function tasks(items = state.tasks) {
   return items.map(task => {
     const report = getReport(task.reportId);
     const nextLabel = task.status === "Assigned" ? "Start task" : task.status === "In progress" ? "Complete task" : "Completed";
-    return `<div class="task card"><div><strong>${esc(task.text)}</strong><small>${esc(task.assignee || task.assigneeEmail)}${report ? ` · ${esc(report.place)}` : ""} · ${tag(task.status, "gray")}</small></div>${role === "staff" && session.emailVerified && task.assigneeEmail === session.email ? `<button class="btn secondary task-progress" data-id="${task.id}" ${task.status === "Completed" ? "disabled" : ""}>${nextLabel}</button>` : ""}</div>`;
+    return `<div class="task card"><div><strong>${esc(task.text)}</strong><small>${esc(task.assignee || task.assigneeEmail)}${report ? ` · ${esc(report.place)}` : ""} · ${tag(task.status, "gray")}</small></div>${role === "staff" && task.assigneeEmail === session.email ? `<button class="btn secondary task-progress" data-id="${task.id}" ${task.status === "Completed" ? "disabled" : ""}>${nextLabel}</button>` : ""}</div>`;
   }).join("");
 }
 
@@ -1483,18 +1469,6 @@ document.addEventListener("click", async e => {
     save().then(() => syncFromApi());
     return;
   }
-  if (target.id === "resend-verification") {
-    fetch("/api/send-verification-email", {
-      method: "POST",
-      headers: { Authorization: `Bearer ${authToken()}`, "Content-Type": "application/json" },
-      body: "{}"
-    }).then(async response => {
-      const result = await response.json();
-      if (!response.ok) throw new Error(result.error || "Could not send verification email.");
-      notify(result.message);
-    }).catch(error => notify(error.message));
-    return;
-  }
   if (target.dataset.passwordToggle) {
     const input = document.querySelector(`#${target.dataset.passwordToggle}`);
     const visible = input.type === "text";
@@ -1586,7 +1560,6 @@ document.addEventListener("click", async e => {
   }
   if (!item) return;
   if (target.classList.contains("vote") && ["user", "staff"].includes(role)) {
-    if (!session.emailVerified) return notify("Verify your university email before upvoting.");
     if (item.voted) return alert("You have already voted on this report.");
     target.disabled = true;
     try {
@@ -1841,11 +1814,6 @@ document.addEventListener("submit", async e => {
   item.consent = form.get("consent") === "on";
   const error = document.querySelector("#report-error");
   error.textContent = "";
-  if (!session.emailVerified) {
-    storeDraft(e.target);
-    error.textContent = "Verify your university email before publishing a report.";
-    return;
-  }
   if (item.latitude && item.longitude) {
     try {
       await loadBangladeshBoundary();
@@ -1868,7 +1836,7 @@ document.addEventListener("submit", async e => {
   const duplicates = item.type === "issue" ? duplicateReports(item) : [];
   if (duplicates.length && e.target.dataset.allowDuplicate !== "true") {
     const suggestions = document.querySelector("#duplicate-suggestions");
-    suggestions.innerHTML = `<strong>Similar open reports in the last 14 days</strong>${duplicates.map(report => `<div class="row"><span>${esc(report.title)} · ${esc(report.place)} · <span class="duplicate-vote-count">${report.votes} ${report.votes === 1 ? "upvote" : "upvotes"}</span></span>${session.emailVerified ? `<button type="button" class="btn secondary vote" data-id="${esc(report.id)}" ${report.voted ? "disabled" : ""}>${report.voted ? "Upvoted" : "Upvote this instead"}</button>` : `<span class="small">Verify your university email to upvote.</span>`}</div>`).join("")}<div class="actions"><a class="btn ghost" href="#reports" data-page="reports">Browse reports</a><button type="button" class="btn ghost submit-duplicate">Submit as possible duplicate</button></div>`;
+    suggestions.innerHTML = `<strong>Similar open reports in the last 14 days</strong>${duplicates.map(report => `<div class="row"><span>${esc(report.title)} · ${esc(report.place)} · <span class="duplicate-vote-count">${report.votes} ${report.votes === 1 ? "upvote" : "upvotes"}</span></span><button type="button" class="btn secondary vote" data-id="${esc(report.id)}" ${report.voted ? "disabled" : ""}>${report.voted ? "Upvoted" : "Upvote this instead"}</button></div>`).join("")}<div class="actions"><a class="btn ghost" href="#reports" data-page="reports">Browse reports</a><button type="button" class="btn ghost submit-duplicate">Submit as possible duplicate</button></div>`;
     suggestions.classList.remove("hidden");
     return;
   }
@@ -1933,39 +1901,3 @@ window.addEventListener("online", () => {
 window.addEventListener("offline", () => { document.body.dataset.connection = "offline"; });
 render();
 if (session) syncFromApi();
-if (verificationTokenFromUrl) {
-  fetch("/api/verify-email", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ token: verificationTokenFromUrl })
-  }).then(async response => {
-    let result;
-    try {
-      result = await response.json();
-    } catch {
-      throw new Error(verificationServerUnavailable);
-    }
-    if (!response.ok) throw new Error(result.error || "Email verification failed.");
-    if (session?.email === result.email) {
-      session.emailVerified = true;
-      localStorage.setItem("losttrack-session", JSON.stringify(session));
-    }
-    if (!session) {
-      localStorage.setItem("losttrack-auth-mode", "login");
-      render();
-      setAuthMessage(document.querySelector("#login-error"), result.message, true);
-    } else {
-      render();
-      notify(result.message);
-    }
-  }).catch(error => {
-    const message = error instanceof TypeError
-      ? verificationServerUnavailable
-      : error.message;
-    if (!session) {
-      localStorage.setItem("losttrack-auth-mode", "login");
-      render();
-      setAuthMessage(document.querySelector("#login-error"), message);
-    } else notify(window.LostTrackI18n?.text(message) || message);
-  });
-}
