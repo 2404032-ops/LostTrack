@@ -86,8 +86,10 @@ test("Supabase state and private uploads persist across app restarts", async () 
     }
     const url = new URL(req.url, "http://localhost");
     if (url.pathname === "/storage/v1/bucket/losttrack-uploads" && req.method === "GET") {
-      res.writeHead(bucketReady ? 200 : 404, { "Content-Type": "application/json" });
-      return res.end(bucketReady ? JSON.stringify({ public: false }) : "{}");
+      res.writeHead(bucketReady ? 200 : 400, { "Content-Type": "application/json" });
+      return res.end(bucketReady
+        ? JSON.stringify({ public: false })
+        : JSON.stringify({ statusCode: "404", error: "Bucket not found", message: "Bucket not found", code: "NoSuchBucket" }));
     }
     if (url.pathname === "/storage/v1/bucket" && req.method === "POST") {
       bucketReady = true;
@@ -162,6 +164,7 @@ test("Supabase state and private uploads persist across app restarts", async () 
     let appPort = await unusedPort();
     appUrl = `http://127.0.0.1:${appPort}`;
     cloudApp = await startServer(appUrl, serviceEnvironment(appPort));
+    assert.equal(bucketReady, true);
     let student = await cloudLogin("cloud-student@uftb.ac.bd", studentPassword);
     const stateResponse = await cloudRequest("/api/state", student.token);
     stateResponse.reports.push({

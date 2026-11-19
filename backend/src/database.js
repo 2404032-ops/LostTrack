@@ -111,9 +111,19 @@ async function ensureStorageBucket() {
     if (bucket.public !== false) throw new Error("The Supabase upload bucket must be private.");
     return;
   }
-  if (response.status !== 404) {
-    const detail = (await response.text()).slice(0, 300);
-    throw new Error(`Supabase Storage bucket check failed (${response.status}): ${detail}`);
+  let missingBucket = response.status === 404;
+  if (!missingBucket) {
+    const detail = await response.text();
+    let errorBody;
+    try {
+      errorBody = JSON.parse(detail);
+    } catch {}
+    missingBucket = response.status === 400 &&
+      errorBody?.code === "NoSuchBucket" &&
+      String(errorBody.statusCode) === "404";
+    if (!missingBucket) {
+      throw new Error(`Supabase Storage bucket check failed (${response.status}): ${detail}`);
+    }
   }
   await supabaseRequest("/storage/v1/bucket", {
     method: "POST",
