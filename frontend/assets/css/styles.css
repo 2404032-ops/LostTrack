@@ -548,6 +548,7 @@ footer strong { color: var(--brand-dark); }
   .btn { width: 100%; }
   .topbar #retry-sync, .topbar #language-toggle, .topbar .logout { width: auto; }
   .topbar #theme-toggle { width: auto; }
+  .topbar .top-tools .alert-link { width: auto; }
   .actions .btn { flex: 1 1 100%; }
 }
 

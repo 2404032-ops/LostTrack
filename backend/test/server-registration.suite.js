@@ -42,8 +42,8 @@ test("Brevo sends verification links through its HTTPS API and reports provider 
   const environment = {
     ...process.env,
     APP_BASE_URL: "https://losttrack.example.com",
-    BREVO_API_KEY: "test-brevo-key",
-    BREVO_SENDER_EMAIL: "sender@example.com"
+    BREVO_API_KEY: "  test-brevo-key ",
+    BREVO_SENDER_EMAIL: " sender@example.com  "
   };
   for (const key of ["SMTP_HOST", "SMTP_USER", "SMTP_PASS", "SMTP_FROM"]) delete environment[key];
   const result = spawnSync(process.execPath, ["-e", script], { cwd: root, env: environment, encoding: "utf8" });

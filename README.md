@@ -111,7 +111,7 @@ Copy-Item .env.example .env
 
 - In Google Account settings, enable 2-Step Verification and generate an App Password. Put your Gmail address in `SMTP_USER` and `SMTP_FROM`, and the generated App Password in `SMTP_PASS`. Do not use your regular Google password. Restart the server after editing `.env`.
 - Gmail SMTP delivery and the email verification/reset flows require the account's App Password to be created by its owner.
-- Hosted email uses Brevo's HTTPS API. Configure `BREVO_API_KEY` and a sender email that is verified in Brevo; keep the API key only in the provider's environment settings.
+- Hosted email uses Brevo's HTTPS API. Configure `BREVO_API_KEY` and a sender email that is verified in Brevo; keep the API key only in the provider's environment settings. If Render logs show HTTP 401, replace the revoked or incorrect key in Render with a newly generated Brevo API key, then redeploy.
 
 - User-facing report data does not contain private clues or other claimants' details. Staff does not receive other users' claim details or maintenance tasks assigned to other staff. Report attachments can be viewed by anyone who knows an image URL; never upload faces, identity documents, receipts, or personal contact details.
 - Signing out clears this device's cached account data and saved report draft. If a report has not synced yet, the app asks before removing it. Saved drafts are associated with the signed-in account and are not restored for a different account.

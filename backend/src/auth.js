@@ -7,7 +7,9 @@ const sessions = new Map();
 const loginAttempts = new Map();
 const sessionLifetime = 8 * 60 * 60 * 1000;
 const smtpReady = Boolean(process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS && process.env.SMTP_FROM);
-const brevoReady = Boolean(process.env.BREVO_API_KEY && process.env.BREVO_SENDER_EMAIL);
+const brevoApiKey = process.env.BREVO_API_KEY?.trim();
+const brevoSenderEmail = process.env.BREVO_SENDER_EMAIL?.trim();
+const brevoReady = Boolean(brevoApiKey && brevoSenderEmail);
 const emailReady = smtpReady || brevoReady;
 const mailer = smtpReady ? nodemailer.createTransport({
   host: process.env.SMTP_HOST,
@@ -163,11 +165,11 @@ async function sendOneTimeEmail(email, token, queryKey, subject, instruction, li
   if (brevoReady) {
     const response = await fetch("https://api.brevo.com/v3/smtp/email", {
       method: "POST",
-      headers: { "api-key": process.env.BREVO_API_KEY, "Content-Type": "application/json" },
+      headers: { "api-key": brevoApiKey, "Content-Type": "application/json" },
       body: JSON.stringify({
         sender: {
           name: process.env.BREVO_SENDER_NAME || "LostTrack",
-          email: process.env.BREVO_SENDER_EMAIL
+          email: brevoSenderEmail
         },
         to: [{ email }],
         subject,
