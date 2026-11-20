@@ -1,7 +1,10 @@
 const resetTokenFromUrl = new URLSearchParams(location.search).get("reset-token");
+let resetFlowActive = Boolean(resetTokenFromUrl ||
+  (localStorage.getItem("losttrack-auth-mode") === "reset" && localStorage.getItem("losttrack-reset-token")));
 if (resetTokenFromUrl) {
   localStorage.setItem("losttrack-reset-token", resetTokenFromUrl);
   localStorage.setItem("losttrack-auth-mode", "reset");
+  resetFlowActive = true;
 }
 if (resetTokenFromUrl) history.replaceState(null, "", location.pathname);
 const readLocal = (key, fallback = null) => {
@@ -715,7 +718,7 @@ function render() {
   setLocationPickerPin = null;
   photoPreviewUrls.forEach(URL.revokeObjectURL);
   photoPreviewUrls = [];
-  const loggedIn = Boolean(session);
+  const loggedIn = Boolean(session) && !resetFlowActive;
   document.body.classList.toggle("auth-page", !loggedIn);
   document.body.classList.toggle("admin-mode", loggedIn && role === "admin");
   document.querySelector("#site-header").classList.toggle("hidden", !loggedIn);
@@ -1478,6 +1481,10 @@ document.addEventListener("click", async e => {
     return;
   }
   if (target.dataset.auth) {
+    if (resetFlowActive && target.dataset.auth !== "reset") {
+      resetFlowActive = false;
+      localStorage.removeItem("losttrack-reset-token");
+    }
     localStorage.setItem("losttrack-auth-mode", target.dataset.auth);
     render();
     return;
@@ -1801,7 +1808,12 @@ document.addEventListener("submit", async e => {
         const result = await response.json();
         if (!response.ok) throw new Error(result.error || "Could not update password.");
         localStorage.removeItem("losttrack-reset-token");
+        localStorage.removeItem("losttrack-session");
+        localStorage.removeItem("losttrack-data");
         localStorage.setItem("losttrack-auth-mode", "login");
+        session = null;
+        role = "user";
+        resetFlowActive = false;
         render();
         setAuthMessage(document.querySelector("#login-error"), result.message, true);
       })
@@ -1900,4 +1912,4 @@ window.addEventListener("online", () => {
 });
 window.addEventListener("offline", () => { document.body.dataset.connection = "offline"; });
 render();
-if (session) syncFromApi();
+if (session && !resetFlowActive) syncFromApi();

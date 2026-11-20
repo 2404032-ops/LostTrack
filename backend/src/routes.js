@@ -403,6 +403,7 @@ send(res, 200, { ok: true, state: publicDb(updated, user) });
       `<meta name="losttrack-retention-days" content="${reportRetentionDays}">`
     );
   }
-  send(res, 200, content, types[path.extname(filePath)] || "application/octet-stream");
+  send(res, 200, content, types[path.extname(filePath)] || "application/octet-stream",
+    assetRequest ? { "Cache-Control": "public, max-age=300" } : {});
 
 };

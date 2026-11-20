@@ -9,6 +9,10 @@ test("role access and sensitive fields are enforced on the server", async () => 
   assert.equal(healthResponse.headers.get("x-frame-options"), "DENY");
   assert.equal(healthResponse.headers.get("referrer-policy"), "strict-origin-when-cross-origin");
   assert.equal(healthResponse.headers.get("permissions-policy"), "camera=(), microphone=(), geolocation=()");
+  const htmlResponse = await fetch(`${fixture.baseUrl}/`);
+  assert.equal(htmlResponse.headers.get("cache-control"), "no-store");
+  const assetResponse = await fetch(`${fixture.baseUrl}/assets/css/styles.css`);
+  assert.equal(assetResponse.headers.get("cache-control"), "public, max-age=300");
   await request("/api/state", null, undefined, 401);
   await request("/api/admin/accounts", fixture.tokens.student, undefined, 403);
   await request("/api/vote", null, { reportId: "issue-1" }, 401);

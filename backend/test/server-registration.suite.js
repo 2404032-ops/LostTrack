@@ -1,5 +1,5 @@
 const fixture = require("./server-fixture");
-const { assert, spawnSync, password, root, request, login, readDatabase, writeDatabase } = fixture;
+const { assert, fs, path, vm, spawnSync, password, root, request, login, readDatabase, writeDatabase } = fixture;
 const { emailBaseUrl } = require("../src/auth");
 const { test } = require("node:test");
 
@@ -14,6 +14,44 @@ test("password-reset links prefer the live Render URL and use the active local p
     RENDER_EXTERNAL_URL: "https://losttrack.onrender.com"
   }, 3001), "https://losttrack.example.com");
   assert.equal(emailBaseUrl({ RENDER_EXTERNAL_URL: "https://losttrack.onrender.com" }, 3001), "https://losttrack.onrender.com");
+});
+
+test("a password-reset link opens the reset form despite a saved sign-in session", () => {
+  const source = fs.readFileSync(path.join(root, "frontend", "assets", "js", "app.js"), "utf8");
+  const values = new Map([
+    ["losttrack-session", JSON.stringify({ token: "old-session", role: "user", id: "student-1" })],
+    ["losttrack-data", JSON.stringify({ reports: [], claims: [], notifications: [], tasks: [] })]
+  ]);
+  const classList = { add() {}, remove() {}, toggle() {} };
+  const app = { innerHTML: "" };
+  const document = {
+    body: { classList },
+    querySelector(selector) {
+      if (selector === "#app") return app;
+      return { classList };
+    },
+    addEventListener() {}
+  };
+  const context = {
+    URL,
+    URLSearchParams,
+    location: { search: "?reset-token=one-time-token", pathname: "/" },
+    history: { replaceState() {} },
+    localStorage: {
+      getItem: key => values.get(key) || null,
+      setItem: (key, value) => values.set(key, value),
+      removeItem: key => values.delete(key)
+    },
+    document,
+    window: { addEventListener() {}, LostTrackI18n: { apply() {} } },
+    navigator: { onLine: true },
+    fetch: () => assert.fail("reset view must not sync the saved session"),
+    console
+  };
+  vm.runInNewContext(source, context, { filename: "frontend/assets/js/app.js" });
+  assert.match(app.innerHTML, /id="reset-form"/);
+  assert.equal(values.get("losttrack-reset-token"), "one-time-token");
+  assert.equal(values.get("losttrack-auth-mode"), "reset");
 });
 
 test("Brevo sends password-reset links through its HTTPS API and reports provider errors", () => {
