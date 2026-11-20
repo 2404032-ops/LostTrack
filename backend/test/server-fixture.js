@@ -68,8 +68,6 @@ function writeDatabase(database) {
 function testEnvironment(port, file, extra = {}) {
   const environment = { ...process.env };
   for (const key of [
-    "SMTP_HOST", "SMTP_USER", "SMTP_PASS", "SMTP_FROM",
-    "BREVO_API_KEY", "BREVO_SENDER_EMAIL", "BREVO_SENDER_NAME",
     "SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY", "SUPABASE_STORAGE_BUCKET",
     "LOSTTRACK_REQUIRE_CLOUD_STORAGE"
   ]) delete environment[key];

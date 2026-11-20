@@ -1,91 +1,10 @@
 const fixture = require("./server-fixture");
-const { assert, fs, path, vm, spawnSync, password, root, request, login, readDatabase, writeDatabase } = fixture;
-const { emailBaseUrl } = require("../src/auth");
+const { assert, password, request, login, readDatabase, writeDatabase } = fixture;
 const { test } = require("node:test");
 
-test("password-reset links prefer the live Render URL and use the active local port", () => {
-  assert.equal(emailBaseUrl({
-    APP_BASE_URL: "http://localhost:3000",
-    RENDER_EXTERNAL_URL: "https://losttrack.onrender.com"
-  }, 3001), "https://losttrack.onrender.com");
-  assert.equal(emailBaseUrl({ APP_BASE_URL: "http://localhost:3000" }, 3001), "http://localhost:3001");
-  assert.equal(emailBaseUrl({
-    APP_BASE_URL: "https://losttrack.example.com",
-    RENDER_EXTERNAL_URL: "https://losttrack.onrender.com"
-  }, 3001), "https://losttrack.example.com");
-  assert.equal(emailBaseUrl({ RENDER_EXTERNAL_URL: "https://losttrack.onrender.com" }, 3001), "https://losttrack.onrender.com");
-});
-
-test("a password-reset link opens the reset form despite a saved sign-in session", () => {
-  const source = fs.readFileSync(path.join(root, "frontend", "assets", "js", "app.js"), "utf8");
-  const values = new Map([
-    ["losttrack-session", JSON.stringify({ token: "old-session", role: "user", id: "student-1" })],
-    ["losttrack-data", JSON.stringify({ reports: [], claims: [], notifications: [], tasks: [] })]
-  ]);
-  const classList = { add() {}, remove() {}, toggle() {} };
-  const app = { innerHTML: "" };
-  const document = {
-    body: { classList },
-    querySelector(selector) {
-      if (selector === "#app") return app;
-      return { classList };
-    },
-    addEventListener() {}
-  };
-  const context = {
-    URL,
-    URLSearchParams,
-    location: { search: "?reset-token=one-time-token", pathname: "/" },
-    history: { replaceState() {} },
-    localStorage: {
-      getItem: key => values.get(key) || null,
-      setItem: (key, value) => values.set(key, value),
-      removeItem: key => values.delete(key)
-    },
-    document,
-    window: { addEventListener() {}, LostTrackI18n: { apply() {} } },
-    navigator: { onLine: true },
-    fetch: () => assert.fail("reset view must not sync the saved session"),
-    console
-  };
-  vm.runInNewContext(source, context, { filename: "frontend/assets/js/app.js" });
-  assert.match(app.innerHTML, /id="reset-form"/);
-  assert.equal(values.get("losttrack-reset-token"), "one-time-token");
-  assert.equal(values.get("losttrack-auth-mode"), "reset");
-});
-
-test("Brevo sends password-reset links through its HTTPS API and reports provider errors", () => {
-  const script = `
-    const assert = require("node:assert/strict");
-    let responseStatus = 201;
-    global.fetch = async (url, options) => {
-      assert.equal(url, "https://api.brevo.com/v3/smtp/email");
-      assert.equal(options.headers["api-key"], "test-brevo-key");
-      const message = JSON.parse(options.body);
-      assert.equal(message.sender.email, "sender@example.com");
-      assert.equal(message.to[0].email, "student@uftb.ac.bd");
-      assert.match(message.textContent, /https:\\/\\/losttrack\\.example\\.com\\/\\?reset-token=abcdef123456/);
-      return { ok: responseStatus < 300, status: responseStatus };
-    };
-    const auth = require("./backend/src/auth");
-    (async () => {
-      await auth.sendPasswordResetEmail("student@uftb.ac.bd", "abcdef123456");
-      responseStatus = 401;
-      await assert.rejects(auth.sendPasswordResetEmail("student@uftb.ac.bd", "abcdef123456"), /HTTP 401/);
-    })().catch(error => {
-      console.error(error);
-      process.exitCode = 1;
-    });
-  `;
-  const environment = {
-    ...process.env,
-    APP_BASE_URL: "https://losttrack.example.com",
-    BREVO_API_KEY: "  test-brevo-key ",
-    BREVO_SENDER_EMAIL: " sender@example.com  "
-  };
-  for (const key of ["SMTP_HOST", "SMTP_USER", "SMTP_PASS", "SMTP_FROM"]) delete environment[key];
-  const result = spawnSync(process.execPath, ["-e", script], { cwd: root, env: environment, encoding: "utf8" });
-  assert.equal(result.status, 0, result.stderr);
+test("password-reset endpoints are removed", async () => {
+  await request("/api/forgot-password", null, {}, 404);
+  await request("/api/reset-password", null, {}, 404);
 });
 
 test("registration validates university email without requiring verification", async () => {

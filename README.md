@@ -1,6 +1,6 @@
 # LostTrack
 
-LostTrack is a responsive campus lost-and-found and environmental issue management prototype based on the supplied proposal and pitch deck. Local development uses a JSON file; the free hosted setup uses Supabase for persistent application data and private image storage, and Brevo's HTTPS API for transactional email. Android and push notifications remain future work.
+LostTrack is a responsive campus lost-and-found and environmental issue management prototype based on the supplied proposal and pitch deck. Local development uses a JSON file; the free hosted setup uses Supabase for persistent application data and private image storage. Android and push notifications remain future work.
 
 ## Run locally on Windows
 
@@ -16,7 +16,7 @@ npm ci
 npm start
 ```
 
-In Notepad, set the bootstrap email and password before the first run. For local email delivery, configure either the SMTP fields or Brevo's API key and verified sender.
+In Notepad, set the bootstrap email and password before the first run.
 `LOSTTRACK_REPORT_RETENTION_DAYS` controls how long closed reports and their related data are kept (default: 30 days; allowed values: 1–3650).
 
 Keep that PowerShell window open while using the app, then open **http://localhost:3000** in your browser. To stop the server, return to PowerShell and press **Ctrl+C**. If port 3000 is already in use, choose another port before starting the server:
@@ -27,8 +27,6 @@ npm start
 ```
 
 Then open **http://localhost:3001**. The server listens only on `127.0.0.1` by default; set `HOST` explicitly only when you intend to expose it on a trusted network.
-
-Local password-reset links point to `http://localhost:<PORT>` and work only while the local server is running on the same computer. `localhost` will not work from a phone or another computer. After deployment, Render uses its public service URL automatically; if you use a custom domain, set `APP_BASE_URL` to that HTTPS URL. Do not set `APP_BASE_URL` to localhost in Render.
 
 To check the code or run the automated tests, open another PowerShell window in the project folder and run:
 
@@ -41,16 +39,15 @@ npm test
 
 ## Deploy a free live demo with GitHub and Render
 
-GitHub stores the source code; it does not run this Node.js API. GitHub Pages alone cannot run LostTrack sign-in, reports, claims, uploads, or password resets. The included [`render.yaml`](./render.yaml) provisions a Render Free web service; Supabase stores normalized PostgreSQL records and private uploads, so Render's temporary filesystem is not used for user data.
+GitHub stores the source code; it does not run this Node.js API. GitHub Pages alone cannot run LostTrack sign-in, reports, or uploads. The included [`render.yaml`](./render.yaml) provisions a Render Free web service; Supabase stores normalized PostgreSQL records and private uploads, so Render's temporary filesystem is not used for user data.
 
 This is a free-tier prototype, not a production service. Render Free services sleep after inactivity, Supabase Free projects may pause after a week without activity, and the free quotas/availability can change. Although the hosted data is normalized, the app still reads and writes a full relational snapshot and is intended for one app instance; Supabase Free has no automatic database backups. Do not use real identity documents or sensitive personal data.
 
 1. Create a free Supabase project. In its **SQL Editor**, run [`backend/migrations/002-normalized-relational-schema.sql`](./backend/migrations/002-normalized-relational-schema.sql). It creates the normalized schema and RPCs used by the app; if the earlier JSONB migration has data, this migration imports that state before removing the old table. Find the project URL and `service_role` key in the Supabase API settings. Keep the key secret; never paste it into chat or commit it. The app creates a private `losttrack-uploads` bucket on first startup.
-2. Optional: configure Brevo or Gmail SMTP if you want password-reset emails. Brevo is accessed over HTTPS; delivery depends on the sender being verified and the provider account being approved.
-3. Push the updated source to the existing public GitHub repository. Do not add `.env`, `backend/storage/db.json`, or uploaded photos; `.gitignore` excludes them. GitHub Actions runs syntax checks and the backend tests.
-4. In Render, choose **New → Blueprint**, connect GitHub, and select `iftiurhossen11/LostTrack`. Review the Blueprint: the web service plan should say **Free**, with no disk. Apply it and enter `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `LOSTTRACK_INITIAL_ADMIN_EMAIL`, and a strong `LOSTTRACK_INITIAL_ADMIN_PASSWORD` directly in Render's secure environment form. Add `BREVO_API_KEY` and `BREVO_SENDER_EMAIL` only if you want password-reset emails. Do not send these values to anyone.
-5. Wait for the service to become **Live**, open its `onrender.com` URL, and verify `/api/health`. Render supplies the public URL for password-reset links. Test registration, report creation, image upload, and sign-in with the initial Main Admin account.
-6. After confirming admin sign-in, remove `LOSTTRACK_INITIAL_ADMIN_EMAIL` and `LOSTTRACK_INITIAL_ADMIN_PASSWORD` from the Render environment and redeploy; the created account remains in Supabase. Future pushes to the linked branch can trigger deployment automatically.
+2. Push the updated source to the existing public GitHub repository. Do not add `.env`, `backend/storage/db.json`, or uploaded photos; `.gitignore` excludes them. GitHub Actions runs syntax checks and the backend tests.
+3. In Render, choose **New → Blueprint**, connect GitHub, and select `iftiurhossen11/LostTrack`. Review the Blueprint: the web service plan should say **Free**, with no disk. Apply it and enter `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `LOSTTRACK_INITIAL_ADMIN_EMAIL`, and a strong `LOSTTRACK_INITIAL_ADMIN_PASSWORD` directly in Render's secure environment form. Do not send these values to anyone.
+4. Wait for the service to become **Live**, open its `onrender.com` URL, and verify `/api/health`. Test registration, report creation, image upload, and sign-in with the initial Main Admin account.
+5. After confirming admin sign-in, remove `LOSTTRACK_INITIAL_ADMIN_EMAIL` and `LOSTTRACK_INITIAL_ADMIN_PASSWORD` from the Render environment and redeploy; the created account remains in Supabase. Future pushes to the linked branch can trigger deployment automatically.
 
 ## First administrator setup
 
@@ -100,22 +97,11 @@ backend/storage/uploads/
 ## Authentication and privacy notes
 
 - Public registration accepts only `@uftb.ac.bd` addresses; Student accounts activate immediately and Staff accounts require administrator approval. Public Main Admin registration is disabled.
-- Passwords use salted scrypt hashes. Session tokens expire after eight hours. Password reset invalidates existing sessions.
+- Passwords use salted scrypt hashes. Session tokens expire after eight hours.
 - University email domain syntax is checked at registration. Email verification is not required for Students or approved Staff to use their role permissions.
-- Password-reset tokens are never returned by the API. Reset emails require SMTP or Brevo configuration. Without email delivery, the API returns a configuration error instead of exposing a reset token.
-- Local Gmail SMTP reads settings from `.env` (copy `.env.example` to `.env`) or from the process environment. Never commit `.env` or share its App Password:
-
-```powershell
-Copy-Item .env.example .env
-```
-
-- In Google Account settings, enable 2-Step Verification and generate an App Password. Put your Gmail address in `SMTP_USER` and `SMTP_FROM`, and the generated App Password in `SMTP_PASS`. Do not use your regular Google password. Restart the server after editing `.env`.
-- Gmail SMTP password-reset delivery requires the account's App Password to be created by its owner.
-- Optional hosted password-reset email uses Brevo's HTTPS API. Configure `BREVO_API_KEY` and a sender email that is verified in Brevo; keep the API key only in the provider's environment settings.
-
 - User-facing report data does not contain private clues or other claimants' details. Staff does not receive other users' claim details or maintenance tasks assigned to other staff. Report attachments can be viewed by anyone who knows an image URL; never upload faces, identity documents, receipts, or personal contact details.
 - Signing out clears this device's cached account data and saved report draft. If a report has not synced yet, the app asks before removing it. Saved drafts are associated with the signed-in account and are not restored for a different account.
-- Local mode uses a JSON file with atomic file replacement. Hosted mode stores accounts, reports, votes, claims, private clues, notifications, tasks, history, and password resets in normalized PostgreSQL tables, with a private Storage bucket for images. The server-only service role calls transactional RPCs to preserve the app's existing state contract; this prototype still rewrites the relational snapshot on each change and is intended for a single instance, not production-scale concurrency. Row-level security is enabled and direct anon/authenticated table access is revoked. Back up or export data before changes; free tiers do not guarantee backups, uptime, or email delivery.
+- Local mode uses a JSON file with atomic file replacement. Hosted mode stores accounts, reports, votes, claims, private clues, notifications, tasks, and history in normalized PostgreSQL tables, with a private Storage bucket for images. The server-only service role calls transactional RPCs to preserve the app's existing state contract; this prototype still rewrites the relational snapshot on each change and is intended for a single instance, not production-scale concurrency. Row-level security is enabled and direct anon/authenticated table access is revoked. Back up or export data before changes; free tiers do not guarantee backups or uptime.
 - The automated suite covers server-side behavior; the offline retry flow was also exercised in a browser with a simulated network failure. The planned 5-8 person usability study and 30-pair match-precision evaluation still require real participants and a recorded sample set; no such results are claimed.
 
 ## API overview
@@ -124,7 +110,7 @@ Copy-Item .env.example .env
 - Student and Staff contribution endpoints require verified university email. `POST /api/claims` also requires explicit claim consent; claim details are omitted from Student/Staff `/api/state` responses and retained only for administrator review.
 - `POST /api/admin/claims/reopen` (Main Admin only)
 - `POST /api/vote` requires a Bearer token and allows one vote per student per open issue.
-- `POST /api/login`, `POST /api/register`, `POST /api/forgot-password`, `POST /api/reset-password`
+- `POST /api/login`, `POST /api/register`
 - `GET /api/state`, `POST /api/state` (Bearer session required; writes are role-filtered and server-validated)
 - `POST /api/uploads` (Bearer session required)
 - `GET /api/admin/accounts`, `POST /api/admin/accounts/approve` (Main Admin only)

@@ -21,12 +21,6 @@ services:
         sync: false
       - key: SUPABASE_STORAGE_BUCKET
         value: losttrack-uploads
-      - key: BREVO_API_KEY
-        sync: false
-      - key: BREVO_SENDER_EMAIL
-        sync: false
-      - key: BREVO_SENDER_NAME
-        value: LostTrack
       - key: LOSTTRACK_REPORT_RETENTION_DAYS
         value: "30"
       - key: LOSTTRACK_INITIAL_ADMIN_NAME

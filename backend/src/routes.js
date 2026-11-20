@@ -7,8 +7,7 @@ const { send, readRequestBody, imageType } = require("./http-utils");
 const { publicDb, mergeState } = require("./report-state");
 const auth = require("./auth");
 const {
-  sessions, passwordResetEmailReady, authenticatedUser, rateLimited, loginUser, registerUser,
-  createPasswordReset, sendPasswordResetEmail, deletePasswordReset, resetPassword
+  sessions, authenticatedUser, rateLimited, loginUser, registerUser
 } = auth;
 const { historyEntry, addNotification, trustLevel } = require("./report-matching");
 const { searchBangladeshLocations } = require("./location-search");
@@ -55,7 +54,7 @@ module.exports = function handleRequest(req, res) {
     });
     return;
   }
-  if (["/api/login", "/api/register", "/api/forgot-password", "/api/reset-password"].includes(url.pathname) && req.method === "POST") {
+  if (["/api/login", "/api/register"].includes(url.pathname) && req.method === "POST") {
     if (rateLimited(req)) return send(res, 429, { ok: false, error: "Too many attempts. Try again later." });
     readRequestBody(req, 20_000, async raw => {
       let body;
@@ -75,28 +74,6 @@ module.exports = function handleRequest(req, res) {
             ? "Staff account request submitted. An administrator must approve your account."
             : "Student account created. You can now sign in.";
           return send(res, 201, { ok: true, pending: result === "pending", message });
-        }
-        if (url.pathname === "/api/forgot-password") {
-          if (!passwordResetEmailReady) return send(res, 503, { ok: false, error: "Password-reset email is not configured. Contact the administrator." });
-          const reset = await createPasswordReset(body.email || "");
-          if (reset) {
-            try {
-              await sendPasswordResetEmail(String(body.email).toLowerCase(), reset.token);
-            } catch (error) {
-              await deletePasswordReset(reset.key);
-              console.error("Password-reset email delivery failed:", error.message);
-              return send(res, 503, { ok: false, error: "The reset email could not be sent. Please try again later." });
-            }
-          }
-          return send(res, 200, {
-            ok: true,
-            message: "If an account exists for this email, a password-reset link has been sent."
-          });
-        }
-        if (url.pathname === "/api/reset-password") {
-          const error = await resetPassword(body.token || "", body.password || "");
-          if (error) return send(res, 400, { ok: false, error });
-          return send(res, 200, { ok: true, message: "Password updated. You can now sign in." });
         }
         const user = loginUser(body.email || "", body.password || "");
         if (!user) return send(res, 401, { ok: false, error: "Invalid university email or password." });

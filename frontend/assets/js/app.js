@@ -1,12 +1,3 @@
-const resetTokenFromUrl = new URLSearchParams(location.search).get("reset-token");
-let resetFlowActive = Boolean(resetTokenFromUrl ||
-  (localStorage.getItem("losttrack-auth-mode") === "reset" && localStorage.getItem("losttrack-reset-token")));
-if (resetTokenFromUrl) {
-  localStorage.setItem("losttrack-reset-token", resetTokenFromUrl);
-  localStorage.setItem("losttrack-auth-mode", "reset");
-  resetFlowActive = true;
-}
-if (resetTokenFromUrl) history.replaceState(null, "", location.pathname);
 const readLocal = (key, fallback = null) => {
   try { return JSON.parse(localStorage.getItem(key) || "null") || fallback; } catch { return fallback; }
 };
@@ -718,7 +709,7 @@ function render() {
   setLocationPickerPin = null;
   photoPreviewUrls.forEach(URL.revokeObjectURL);
   photoPreviewUrls = [];
-  const loggedIn = Boolean(session) && !resetFlowActive;
+  const loggedIn = Boolean(session);
   document.body.classList.toggle("auth-page", !loggedIn);
   document.body.classList.toggle("admin-mode", loggedIn && role === "admin");
   document.querySelector("#site-header").classList.toggle("hidden", !loggedIn);
@@ -1009,13 +1000,9 @@ function adminStatCards(open, issues, votes, pendingClaims, overdueReports) {
 }
 
 const pages = {
-  auth: mode => mode === "forgot"
-    ? `<section class="auth-shell"><form id="forgot-form" class="card auth-form"><img class="login-logo" src="/assets/images/logo-transparent.png" alt="LostTrack logo"><h2>Forgot password</h2><p>Enter your university email to create a secure reset link.</p><label>University email<input name="email" type="email" placeholder="you@uftb.ac.bd" required autocomplete="email"></label><div id="forgot-error" class="form-error"></div><button class="btn" type="submit">Send reset link</button><button class="btn ghost" type="button" data-auth="login">Back to sign in</button></form></section>`
-    : mode === "reset"
-    ? `<section class="auth-shell"><form id="reset-form" class="card auth-form"><img class="login-logo" src="/assets/images/logo-transparent.png" alt="LostTrack logo"><h2>Set new password</h2><label>New password<span class="password-field"><input id="reset-password" name="password" type="password" placeholder="Create a strong password" required minlength="12" autocomplete="new-password"><button type="button" class="password-toggle" data-password-toggle="reset-password" aria-label="Show password">Show</button></span><span id="password-strength" class="password-strength">12+ characters, upper/lowercase, number and symbol</span></label><div id="reset-error" class="form-error"></div><button class="btn" type="submit">Update password</button><button class="btn ghost" type="button" data-auth="login">Back to sign in</button></form></section>`
-    : mode === "register"
+  auth: mode => mode === "register"
     ? `<section class="auth-shell"><form id="register-form" class="card auth-form"><img class="login-logo" src="/assets/images/logo-transparent.png" alt="LostTrack logo"><h2>Create account</h2><label>Full name<input name="name" type="text" placeholder="Your name" required minlength="2" maxlength="80" autocomplete="name"></label><label>University email<input name="email" type="email" placeholder="you@uftb.ac.bd" required autocomplete="email"></label><label>Account type<select name="role" required><option value="user">Student (active now)</option><option value="staff">Staff (approval required)</option></select></label><label>Password<span class="password-field"><input id="register-password" name="password" type="password" placeholder="Create a strong password" required minlength="12" autocomplete="new-password"><button type="button" class="password-toggle" data-password-toggle="register-password" aria-label="Show password">Show</button></span><span id="password-strength" class="password-strength">12+ characters, upper/lowercase, number and symbol</span></label><p class="small privacy-note" data-retention-message="registration"></p><label class="check"><input name="privacyConsent" type="checkbox" required> I have read and consent to this privacy notice.</label><div id="register-error" class="form-error"></div><button class="btn" type="submit">Create account</button><button class="btn ghost" type="button" data-auth="login">Already have an account? Sign in</button></form></section>`
-    : `<section class="auth-shell"><form id="login-form" class="card auth-form"><img class="login-logo" src="/assets/images/logo-transparent.png" alt="LostTrack logo"><h2>Sign in</h2><label>University email<input name="email" type="email" placeholder="you@uftb.ac.bd" required autocomplete="email"></label><label>Password<span class="password-field"><input id="login-password" name="password" type="password" placeholder="Your password" required autocomplete="current-password"><button type="button" class="password-toggle" data-password-toggle="login-password" aria-label="Show password">Show</button></span></label><div id="login-error" class="form-error"></div><button class="btn" type="submit">Sign in</button><div class="auth-links"><button class="btn ghost" type="button" data-auth="forgot">Forgot password?</button><button class="btn ghost" type="button" data-auth="register">Create a new account</button></div></form></section>`,
+    : `<section class="auth-shell"><form id="login-form" class="card auth-form"><img class="login-logo" src="/assets/images/logo-transparent.png" alt="LostTrack logo"><h2>Sign in</h2><label>University email<input name="email" type="email" placeholder="you@uftb.ac.bd" required autocomplete="email"></label><label>Password<span class="password-field"><input id="login-password" name="password" type="password" placeholder="Your password" required autocomplete="current-password"><button type="button" class="password-toggle" data-password-toggle="login-password" aria-label="Show password">Show</button></span></label><div id="login-error" class="form-error"></div><button class="btn" type="submit">Sign in</button><div class="auth-links"><button class="btn ghost" type="button" data-auth="register">Create a new account</button></div></form></section>`,
   home: () => {
     const mine = state.reports.filter(report => report.createdBy === session.id);
     const openMine = mine.filter(report => ["Open", "Found"].includes(report.status)).length;
@@ -1481,10 +1468,6 @@ document.addEventListener("click", async e => {
     return;
   }
   if (target.dataset.auth) {
-    if (resetFlowActive && target.dataset.auth !== "reset") {
-      resetFlowActive = false;
-      localStorage.removeItem("losttrack-reset-token");
-    }
     localStorage.setItem("losttrack-auth-mode", target.dataset.auth);
     render();
     return;
@@ -1787,39 +1770,6 @@ document.addEventListener("submit", async e => {
       .catch(errorValue => { setAuthMessage(error, errorValue.message); });
     return;
   }
-  if (e.target.id === "forgot-form") {
-    e.preventDefault();
-    const error = document.querySelector("#forgot-error");
-    fetch("/api/forgot-password", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(Object.fromEntries(new FormData(e.target))) })
-      .then(async response => {
-        const result = await response.json();
-        if (!response.ok) throw new Error(result.error || "Could not create reset link.");
-        setAuthMessage(error, result.message, true);
-      })
-      .catch(errorValue => { setAuthMessage(error, errorValue.message); });
-    return;
-  }
-  if (e.target.id === "reset-form") {
-    e.preventDefault();
-    const error = document.querySelector("#reset-error");
-    const body = { token: localStorage.getItem("losttrack-reset-token") || "", password: new FormData(e.target).get("password") };
-    fetch("/api/reset-password", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })
-      .then(async response => {
-        const result = await response.json();
-        if (!response.ok) throw new Error(result.error || "Could not update password.");
-        localStorage.removeItem("losttrack-reset-token");
-        localStorage.removeItem("losttrack-session");
-        localStorage.removeItem("losttrack-data");
-        localStorage.setItem("losttrack-auth-mode", "login");
-        session = null;
-        role = "user";
-        resetFlowActive = false;
-        render();
-        setAuthMessage(document.querySelector("#login-error"), result.message, true);
-      })
-      .catch(errorValue => { setAuthMessage(error, errorValue.message); });
-    return;
-  }
   if (e.target.id !== "report-form") return;
   e.preventDefault();
   const form = new FormData(e.target), item = Object.fromEntries(form);
@@ -1898,7 +1848,7 @@ document.addEventListener("submit", async e => {
   }
 });
 document.addEventListener("input", e => {
-  if (!["login-password", "register-password", "reset-password"].includes(e.target.id)) return;
+  if (!["login-password", "register-password"].includes(e.target.id)) return;
   const password = e.target.value;
   const strong = password.length >= 12 && /[a-z]/.test(password) && /[A-Z]/.test(password) &&
     /\d/.test(password) && /[^A-Za-z0-9]/.test(password);
@@ -1912,4 +1862,4 @@ window.addEventListener("online", () => {
 });
 window.addEventListener("offline", () => { document.body.dataset.connection = "offline"; });
 render();
-if (session && !resetFlowActive) syncFromApi();
+if (session) syncFromApi();
